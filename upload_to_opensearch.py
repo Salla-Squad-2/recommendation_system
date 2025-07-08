@@ -6,12 +6,12 @@ import os
 # Configuration
 FILES = [
     {
-        'csv': '/data/ecommerce_customer_data_en.csv',
+        'csv': 'ecommerce_customer_data_en.csv',
         'schema': 'schema_en.json',
         'index': 'data-recommendation-en'
     },
     {
-        'csv': '/data/ecommerce_customer_data_ar.csv',
+        'csv': 'ecommerce_customer_data_ar.csv',
         'schema': 'schema_ar.json',
         'index': 'data-recommendation-ar'
     }
