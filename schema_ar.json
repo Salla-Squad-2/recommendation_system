@@ -1,0 +1,49 @@
+{
+    "settings": {
+      "analysis": {
+        "analyzer": {
+          "arabic_analyzer": {
+            "type": "arabic"
+          }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "Customer ID": {
+          "type": "long"
+        },
+        "Purchase Date": {
+          "type": "date",
+          "format": "M/d/yyyy H:mm"
+        },
+        "Product Category": {
+          "type": "keyword"
+        },
+        "Product Price": {
+          "type": "float"
+        },
+        "Quantity": {
+          "type": "integer"
+        },
+        "Customer Age": {
+          "type": "integer"
+        },
+        "Gender": {
+          "type": "keyword"
+        },
+        "Product_ID": {
+          "type": "keyword"
+        },
+        "Customer Name": {
+          "type": "text",
+          "analyzer": "arabic_analyzer"
+        },
+        "Product Description": {
+          "type": "text",
+          "analyzer": "arabic_analyzer"
+        }
+      }
+    }
+  }
+  
