@@ -22,7 +22,7 @@ OPENSEARCH_URL = 'http://localhost:9200'
 HEADERS = {'Content-Type': 'application/json'}
 BATCH_SIZE = 10     # You can change it
 
-def upload_batch(index_name, batch_df):
+def upload_batch(index_name, schema_file, batch_df):
     for _, row in batch_df.iterrows():
         bulk_data = json.dumps({"index": {"_index": index_name}}) + '\n'
         doc = row.to_dict()
