@@ -1,82 +1,47 @@
 {
+  "settings": {
+    "index": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1
+    },
+    "analysis": {
+      "analyzer": {
+        "custom_text_analyzer": {
+          "type": "standard"
+        }
+      }
+    }
+  },
   "mappings": {
     "properties": {
-      "productCode": { "type": "keyword" },
-      "alternateGalleryImages": { "type": "keyword" },
-
+      "productCode": {
+        "type": "keyword"
+      },
+      "image": {
+        "type": "keyword"
+      },
+      "category": {
+        "type": "keyword"
+      },
+      "price": {
+        "type": "float"
+      },
       "name": {
         "type": "text",
-        "fields": {
-          "keyword": { "type": "keyword", "ignore_above": 256 }
-        }
+        "analyzer": "custom_text_analyzer"
       },
-      "department": { "type": "keyword" },
-      "subDepartment": { "type": "keyword" },
-      "editorialDescription": { "type": "text" },
-      "detailParts": { "type": "text" },
-      "materials": { "type": "text" },
-      "lineName": { "type": "keyword" },
-      "variant": { "type": "keyword" },
-      "colors": { "type": "keyword" },
-
-      "price": {
-        "type": "object",
-        "properties": {
-          "country": { "type": "keyword" },
-          "currency": { "type": "keyword" },
-          "isTaxExcluded": { "type": "boolean" },
-          "lastFullPrice": { "type": "float", "null_value": null },
-          "price": { "type": "float" },
-          "priceList": { "type": "keyword" },
-          "styleCode": { "type": "keyword" },
-          "validFrom": { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time" }
-        }
+      "description": {
+        "type": "text",
+        "analyzer": "custom_text_analyzer"
       },
-
-      "season": { "type": "keyword" },
-      "genders": { "type": "keyword" },
-
-      "prices": {
-        "type": "nested",
-        "properties": {
-          "country": { "type": "keyword" },
-          "lastFullPrice": { "type": "float", "null_value": null },
-          "price": { "type": "float" },
-          "isTaxExcluded": { "type": "boolean" },
-          "currency": { "type": "keyword" },
-          "validFrom": { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time" },
-          "styleCode": { "type": "keyword" },
-          "priceList": { "type": "keyword" }
-        }
+      "name_vector": {
+        "type": "knn_vector",
+        "dimension": 384  
       },
-
-      "translations": {
-        "type": "object",
-        "enabled": false
-      },
-
-      "exotic": { "type": "boolean" },
-      "images": { "type": "keyword" },
-      "madeIn": { "type": "keyword" },
-
-      "lastUpdated": {
-        "type": "date",
-        "format": "strict_date_optional_time||yyyy-MM-dd||yyyy-MM-dd HH:mm:ss||epoch_millis"
-      },
-
-      "productLink": { "type": "keyword", "index": false },
-      "categoryPath": { "type": "keyword" },
-
-      "variants": {
-        "type": "nested",
-        "properties": {
-          "variantCode": { "type": "keyword" },
-          "variantName": { "type": "text" },
-          "attributes": { "type": "object", "enabled": false }
-        }
-      },
-
-      "sustainabilityFeatures": { "type": "text" }
+      "description_vector": {
+        "type": "knn_vector",
+        "dimension": 384  
+      }
     }
   }
 }
