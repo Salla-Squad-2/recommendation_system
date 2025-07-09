@@ -54,7 +54,7 @@ def upload_batch(index_name, schema_file, batch_df):
     print(f"Batch uploaded successfully: {len(batch_df)} records")
     return True
 
-def process_file(csv_file, index_name):
+def process_file(csv_file, schema_file, index_name):
 
     try:
         df = pd.read_csv(csv_file, encoding='utf-8')
