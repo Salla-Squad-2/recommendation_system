@@ -1,0 +1,40 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1
+    },
+    "analysis": {
+      "analyzer": {
+        "custom_text_analyzer": {
+          "type": "standard"
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "productCode": {
+        "type": "keyword"
+      },
+      
+      "image": {
+        "type": "keyword"
+      },
+      "category": {
+        "type": "keyword"
+      },
+      "price": {
+        "type": "float"
+      },
+      "name": {
+        "type": "text",
+        "analyzer": "custom_text_analyzer"
+      },
+      "description": {
+        "type": "text",
+        "analyzer": "custom_text_analyzer"
+      }
+    }
+  }
+}
