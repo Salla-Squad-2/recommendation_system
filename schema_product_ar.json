@@ -17,6 +17,7 @@
       "productCode": {
         "type": "keyword"
       },
+      
       "image": {
         "type": "keyword"
       },
