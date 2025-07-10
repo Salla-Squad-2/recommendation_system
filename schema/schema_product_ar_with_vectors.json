@@ -20,7 +20,7 @@
       "name": { "type": "text", "analyzer": "custom_text_analyzer" },
       "description": { "type": "text", "analyzer": "custom_text_analyzer" },
 
-      "id_customer": { "type": "long" },
+      "id_customer": { "type": "keyword" },
       "purchase_date": {
         "type": "date",
         "format": "strict_date_optional_time||yyyy-MM-dd'T'HH:mm:ss||yyyy-MM-dd||epoch_millis"
