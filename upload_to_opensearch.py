@@ -1,128 +1,290 @@
+import os
+import json
 import pandas as pd
 import numpy as np
-import json, re, os, sys
-import requests
 import torch
-from transformers import AutoTokenizer, AutoModel
+import requests
 from tqdm import tqdm
+from transformers import AutoTokenizer, AutoModel
 
-# ────────── CONFIG ──────────
-CSV_PATH        = "sample_products.csv"        
-SCHEMA_PATH     = "schema.json"               
-INDEX_NAME      = "product_vectors"
-OPENSEARCH_URL  = "http://localhost:9200"     
-MODEL_NAME      = "intfloat/multilingual-e5-base"
-BATCH_SIZE_DOCS = 100
-DEVICE          = "cuda" if torch.cuda.is_available() else "cpu"
+# Configuration 
+OPENSEARCH_URL = 'http://localhost:9200'
+HEADERS = {'Content-Type': 'application/json'}
+MODEL_NAME = 'intfloat/multilingual-e5-base'
+BATCH_SIZE_UPLOAD = 10
+BATCH_SIZE_EMBED = 64
+BATCH_SIZE = 10
 
-def find_col(df, patterns):
-    for col in df.columns:
-        for p in patterns:
-            if re.search(p, col, re.IGNORECASE):
-                return col
-    return None
+print('Loading model and tokenizer...')
+try:
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModel.from_pretrained(MODEL_NAME)
+    model.eval()
+    print('Model loaded successfully')
+except Exception as e:
+    print(f'Error loading model: {str(e)}')
+    exit(1)
 
-print(f"Loading model: {MODEL_NAME} on {DEVICE}")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModel.from_pretrained(MODEL_NAME).to(DEVICE).eval()
+FILES = [
+    {
+        'csv': './dataset/customer_history_data_ar.xlsx',
+        'schema': './schema/schema_history_customer.json',
+        'index': 'products-history-ar',
+        'with_vectors': False
+    },
+    {
+        'csv': './dataset/customer_history_data_ar_with_vectors.csv',
+        'schema': './schema/schema_product_ar_with_vectors.json',
+        'index': 'products-history-vectors',
+        'with_vectors': True
+    }
+]
 
+# Vector embedding generation
 @torch.no_grad()
-def embed(text_batch):
-    inputs = tokenizer(
-        [f"passage: {t}" for t in text_batch],
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=256
-    ).to(DEVICE)
+def generate_embeddings(texts):
+    """Generate embeddings for a list of texts using the language model"""
+    inputs = tokenizer([f'passage: {t}' for t in texts], 
+                       return_tensors='pt',
+                       padding=True, 
+                       truncation=True, 
+                       max_length=256)
+    outputs = model(**inputs).last_hidden_state[:, 0, :]
+    return torch.nn.functional.normalize(outputs, p=2, dim=1).cpu().numpy()
 
-    output = model(**inputs).last_hidden_state[:, 0, :]
-    normalized = torch.nn.functional.normalize(output, p=2, dim=1)
-    return normalized.cpu().numpy()
-
-if not os.path.isfile(CSV_PATH):
-    sys.exit(f"CSV not found: {CSV_PATH}")
-
-df = pd.read_csv(CSV_PATH).fillna("")
-
-id_col   = find_col(df, ["^id$", "product[_-]?id", "id_product"])
-name_col = find_col(df, ["name", "title", "name_product"])
-desc_col = find_col(df, ["description", "desc"])
-cat_col  = find_col(df, ["category", "type", "section"])
-
-if not all([id_col, name_col, desc_col, cat_col]):
-    sys.exit("Could not detect all required columns: id, name, description, category.")
-
-print("Detected columns:")
-print(f"   id           → {id_col}")
-print(f"   name         → {name_col}")
-print(f"   description  → {desc_col}")
-print(f"   category     → {cat_col}")
-
-def column_to_vectors(series, label):
-    print(f"🔄 Embedding '{label}' …")
-    texts = series.astype(str).tolist()
-    all_vectors = []
-    for i in tqdm(range(0, len(texts), 64)):
-        batch = texts[i:i+64]
-        vectors = embed(batch)
-        all_vectors.append(vectors)
-    return np.vstack(all_vectors)
-
-name_vecs = column_to_vectors(df[name_col], "name")
-desc_vecs = column_to_vectors(df[desc_col], "description")
-cat_vecs  = column_to_vectors(df[cat_col], "category")
-combo_vecs = (name_vecs + desc_vecs + cat_vecs) / 3.0
-
-if not os.path.exists(SCHEMA_PATH):
-    sys.exit(f"Schema file not found: {SCHEMA_PATH}")
-
-with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
-    mapping = json.load(f)
-
-print(f"Creating or resetting index '{INDEX_NAME}'")
-requests.delete(f"{OPENSEARCH_URL}/{INDEX_NAME}", auth=OPENSEARCH_AUTH)
-
-response = requests.put(
-    f"{OPENSEARCH_URL}/{INDEX_NAME}",
-    headers={"Content-Type": "application/json"},
-    data=json.dumps(mapping),
-    auth=OPENSEARCH_AUTH
-)
-
-if response.status_code not in (200, 201):
-    sys.exit(f"Failed to create index: {response.text}")
+def process_vectors(df, text_columns):
+    """Generate vectors for specified text columns"""
+    vectors = {}
+    for col in text_columns:
+        print(f'Generating vectors for {col}...')
+        batch_vectors = []
+        for i in tqdm(range(0, len(df), BATCH_SIZE)):
+            texts = df[col].iloc[i:i+BATCH_SIZE].fillna('').astype(str).tolist()
+            batch_vectors.append(generate_embeddings(texts))
+        vectors[f'{col}_vector'] = np.vstack(batch_vectors)
     
-def bulk_upload(start, end):
-    lines = []
-    for i in range(start, end):
-        doc = {
-            "id_product":         str(df.iloc[i][id_col]),
-            "name_vector":        name_vecs[i].tolist(),
-            "description_vector": desc_vecs[i].tolist(),
-            "category_vector":    cat_vecs[i].tolist(),
-            "combination_vector": combo_vecs[i].tolist()
-        }
-        lines.append(json.dumps({ "index": { "_index": INDEX_NAME } }))
-        lines.append(json.dumps(doc, ensure_ascii=False))
     
-    body = "\n".join(lines) + "\n"
-    res = requests.post(
-        f"{OPENSEARCH_URL}/_bulk",
-        headers={"Content-Type": "application/json"},
-        data=body.encode("utf-8"),
-        auth=OPENSEARCH_AUTH
+    for col, vec in vectors.items():
+        df[col] = vec.tolist()
+    if len(vectors) > 0:
+        all_vecs = np.stack(list(vectors.values()))
+        df['combination_vector'] = (all_vecs.mean(axis=0)).tolist()
+    return df
+
+def check_index_exists(name):
+    """Check if an index exists and how many documents it has"""
+    auth = None
+    if os.getenv('OPENSEARCH_USER') and os.getenv('OPENSEARCH_PASS'):
+        auth = (os.getenv('OPENSEARCH_USER'), os.getenv('OPENSEARCH_PASS'))
+    
+    try:
+        response = requests.get(f'{OPENSEARCH_URL}/{name}/_count', auth=auth)
+        if response.status_code == 200:
+            count = response.json().get('count', 0)
+            return True, count
+        return False, 0
+    except Exception as e:
+        print(f'Error checking index: {str(e)}')
+        return False, 0
+
+def recreate_index(name, schema_path, force=True):
+    """Recreate the OpenSearch index with the given schema"""
+    if not os.path.exists(schema_path):
+        print(f'Schema file not found: {schema_path}')
+        return False
+        
+    auth = None
+    if os.getenv('OPENSEARCH_USER') and os.getenv('OPENSEARCH_PASS'):
+        auth = (os.getenv('OPENSEARCH_USER'), os.getenv('OPENSEARCH_PASS'))
+    
+    # Check if index exists
+    exists, count = check_index_exists(name)
+    if exists:
+        if not force:
+            print(f'Index {name} already exists with {count} documents. Set force=True to recreate.')
+            return False
+        print(f'Deleting existing index {name} with {count} documents...')
+        response = requests.delete(f'{OPENSEARCH_URL}/{name}', auth=auth)
+        if response.status_code not in (200, 404):
+            print(f'Failed to delete index: {response.text}')
+            return False
+    
+    print(f'Creating index {name} with schema from {schema_path}')
+    with open(schema_path, 'r', encoding='utf-8') as f:
+        schema = json.load(f)
+    
+    response = requests.put(
+        f'{OPENSEARCH_URL}/{name}',
+        headers=HEADERS,
+        json=schema,
+        auth=auth
     )
     
-    if res.status_code != 200 or res.json().get("errors"):
-        print("Bulk upload failed")
-        print(res.text)
-    else:
-        print(f"Uploaded documents {start} to {end}")
+    if response.status_code not in (200, 201):
+        print(f'Failed to create index: {response.text}')
+        return False
+    
+    print(f'Successfully created index: {name}')
+    return True
 
-print("Uploading vectors to OpenSearch")
-for start in range(0, len(df), BATCH_SIZE_DOCS):
-    end = min(start + BATCH_SIZE_DOCS, len(df))
-    bulk_upload(start, end)
+def upload_batch(index_name, batch_df):
+    """Upload a batch of documents to OpenSearch"""
+    auth = None
+    if os.getenv('OPENSEARCH_USER') and os.getenv('OPENSEARCH_PASS'):
+        auth = (os.getenv('OPENSEARCH_USER'), os.getenv('OPENSEARCH_PASS'))
+    
+    # Prepare bulk upload data
+    bulk_data = ''
+    for _, row in batch_df.iterrows():
+        # Add index action
+        bulk_data += json.dumps({'index': {'_index': index_name}}) + '\n'
+        
+        # Convert row to dictionary and handle special types
+        doc = {}
+        for key, value in row.items():
+            # Handle vector fields
+            if key.endswith('_vector'):
+                try:
+                    # Handle string representation of list
+                    if isinstance(value, str):
+                        value = eval(value)
+                    # Convert numpy array to list
+                    if isinstance(value, np.ndarray):
+                        value = value.tolist()
+                    # Ensure value is a list of floats
+                    if isinstance(value, list):
+                        doc[key] = [float(x) for x in value]
+                    else:
+                        print(f'Warning: Invalid vector format for {key}: {type(value)}')
+                        continue
+                except Exception as e:
+                    print(f'Error processing vector {key}: {str(e)}')
+                    continue
+            else:
+                # Handle non-vector fields
+                if isinstance(value, (np.int64, np.float64)):
+                    value = value.item()
+                if pd.isna(value) or value is None:
+                    if key in ['quantity_of_product', 'price']:
+                        doc[key] = 0
+                    else:
+                        doc[key] = ''
+                elif isinstance(value, pd.Timestamp):
+                    doc[key] = value.isoformat()
+                else:
+                    doc[key] = str(value)
+        
+        # Print vector fields for debugging
+        vector_fields = {k: v for k, v in doc.items() if k.endswith('_vector')}
+        if vector_fields:
+            print(f'Vector fields being uploaded: {list(vector_fields.keys())}')
+            for k, v in vector_fields.items():
+                if isinstance(v, list):
+                    print(f'{k} length: {len(v)}')
+        
+        bulk_data += json.dumps(doc, ensure_ascii=False) + '\n'
+    
+    response = requests.post(
+        f'{OPENSEARCH_URL}/_bulk',
+        headers=HEADERS,
+        data=bulk_data.encode('utf-8'),
+        auth=auth
+    )
+    
+    if response.status_code != 200:
+        print(f'Upload failed: {response.text}')
+        return False
+    
+    result = response.json()
+    if result.get('errors'):
+        print('Errors in bulk upload:')
+        for item in result['items']:
+            if 'error' in item['index']:
+                print(item['index']['error'])
+        return False
+    
+    return True
 
-print("Done uploading all data.")
+def process_file(config):
+    """Process a single file according to its configuration"""
+    file_path = config['csv']
+    print(f'\nProcessing: {file_path}')
+    
+
+    try:
+        if config['csv'].endswith('.xlsx'):
+            df = pd.read_excel(config['csv'])
+        else:
+            df = pd.read_csv(config['csv'])
+        print(f'Loaded {len(df)} records')
+    except Exception as e:
+        print(f'Error reading file: {str(e)}')
+        return
+    
+    # Clean data
+    for col in df.columns:
+        if col not in ['name_vector', 'description_vector', 'category_vector', 'combination_vector']:
+            df[col] = df[col].fillna('')
+    print('\nColumns before renaming:\n' + '\n'.join(df.columns.tolist()))
+    
+    # Check if we need to generate vectors
+    if config.get('with_vectors'):
+        # Check if vectors already exist in the data
+        vector_columns = ['name_vector', 'description_vector', 'category_vector', 'combination_vector']
+        has_vectors = all(col in df.columns for col in vector_columns)
+        
+        if not has_vectors:
+            # Use correct column names based on current data
+            if 'name_product' in df.columns:
+                text_columns = ['name_product', 'description', 'category']
+            else:
+                text_columns = ['name', 'description', 'category']
+            
+            df = process_vectors(df, text_columns)
+            print('Vector embeddings generated')
+            
+            # Save the processed data with vectors
+            out_path = './dataset/customer_history_data_ar_with_vectors.csv'
+            df.to_csv(out_path, index=False)
+            print(f'Saved processed data to {out_path}')
+        else:
+            print('Vector embeddings already exist in the data')
+    
+    # Ensure columns match schema
+    df = df.rename(columns={
+        'name_product': 'name'  # Only rename name_product to name if it exists
+    })
+    
+    # Verify required columns exist
+    required_columns = ['id_customer', 'productCode', 'name', 'category', 'purchase_date', 
+                       'description', 'quantity_of_product', 'price', 'order_id']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        print(f'Warning: Missing required columns: {missing_columns}')
+    
+    print('\nColumns after renaming:\n' + '\n'.join(df.columns.tolist()))
+    
+    # Always recreate index to ensure clean state
+    if not recreate_index(config['index'], config['schema'], force=True):
+        return
+    
+    # Upload data in batches
+    print(f'\nUploading {len(df)} documents to {config["index"]}...')
+    total_batches = len(df) // BATCH_SIZE + (1 if len(df) % BATCH_SIZE > 0 else 0)
+    for i in range(0, len(df), BATCH_SIZE):
+        batch_df = df.iloc[i:i+BATCH_SIZE]
+        print(f'Uploading batch {i//BATCH_SIZE + 1}/{total_batches} ({i} to {i+len(batch_df)-1})...')
+        if not upload_batch(config['index'], batch_df):
+            print('Upload failed, stopping')
+            return
+    
+    # Verify final count
+    _, final_count = check_index_exists(config['index'])
+    print(f'Successfully processed {config["csv"]}')
+    print(f'Final document count in {config["index"]}: {final_count}')
+
+if __name__ == '__main__':
+    print('Starting data processing and upload to OpenSearch...')
+    for config in FILES:
+        process_file(config)
+    print('\nProcessing complete!')
