@@ -1,0 +1,39 @@
+{
+  "settings": {
+    "index": {
+      "knn": true,
+      "number_of_shards": 1,
+      "number_of_replicas": 1
+    },
+    "analysis": {
+      "analyzer": {
+        "custom_text_analyzer": {
+          "type": "standard"
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "productCode": { "type": "keyword" },
+      "category": { "type": "keyword" },
+      "name": { "type": "text", "analyzer": "custom_text_analyzer" },
+      "description": { "type": "text", "analyzer": "custom_text_analyzer" },
+
+      "id_customer": { "type": "long" },
+      "purchase_date": {
+        "type": "date",
+        "format": "strict_date_optional_time||yyyy-MM-dd'T'HH:mm:ss||yyyy-MM-dd||epoch_millis"
+      },
+      "quantity_of_product": { "type": "integer" },
+      "price": { "type": "float" },
+      "order_id": { "type": "keyword" },
+
+      "category_vector": { "type": "knn_vector", "dimension": 768 },
+      "name_vector": { "type": "knn_vector", "dimension": 768 },
+      "description_vector": { "type": "knn_vector", "dimension": 768 },
+      "combination_vector": { "type": "knn_vector", "dimension": 768 }
+
+    }
+  }
+}
