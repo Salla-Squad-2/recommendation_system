@@ -16,18 +16,25 @@
   "mappings": {
     "properties": {
       "productCode": { "type": "keyword" },
-      "image": { "type": "keyword" },      
-      "category": { "type": "keyword" },   
-      "price": { "type": "float" },        
+      "category": { "type": "keyword" },
       "name": { "type": "text", "analyzer": "custom_text_analyzer" },
       "description": { "type": "text", "analyzer": "custom_text_analyzer" },
 
-      "image_vector": { "type": "knn_vector", "dimension": 384 },
+      "id_customer": { "type": "long" },
+      "purchase_date": {
+        "type": "date",
+        "format": "strict_date_optional_time||yyyy-MM-dd'T'HH:mm:ss||yyyy-MM-dd||epoch_millis"
+      },
+      "quantity_of_product": { "type": "integer" },
+      "price": { "type": "float" },
+      "order_id": { "type": "keyword" },
+
       "category_vector": { "type": "knn_vector", "dimension": 384 },
-      "price_vector": { "type": "knn_vector", "dimension": 384 },
       "name_vector": { "type": "knn_vector", "dimension": 384 },
       "description_vector": { "type": "knn_vector", "dimension": 384 },
+      "combination_vector": { "type": "knn_vector", "dimension": 384 },
       "avg_vector": { "type": "knn_vector", "dimension": 384 }
+
     }
   }
 }
