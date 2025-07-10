@@ -63,7 +63,6 @@ def process_vectors(df, text_columns):
             batch_vectors.append(generate_embeddings(texts))
         vectors[f'{col}_vector'] = np.vstack(batch_vectors)
     
-    
     for col, vec in vectors.items():
         df[col] = vec.tolist()
     if len(vectors) > 0:
@@ -97,7 +96,6 @@ def recreate_index(name, schema_path, force=True):
     if os.getenv('OPENSEARCH_USER') and os.getenv('OPENSEARCH_PASS'):
         auth = (os.getenv('OPENSEARCH_USER'), os.getenv('OPENSEARCH_PASS'))
     
-    # Check if index exists
     exists, count = check_index_exists(name)
     if exists:
         if not force:
@@ -132,26 +130,18 @@ def upload_batch(index_name, batch_df):
     auth = None
     if os.getenv('OPENSEARCH_USER') and os.getenv('OPENSEARCH_PASS'):
         auth = (os.getenv('OPENSEARCH_USER'), os.getenv('OPENSEARCH_PASS'))
-    
-    # Prepare bulk upload data
     bulk_data = ''
     for _, row in batch_df.iterrows():
-        # Add index action
         bulk_data += json.dumps({'index': {'_index': index_name}}) + '\n'
         
-        # Convert row to dictionary and handle special types
         doc = {}
         for key, value in row.items():
-            # Handle vector fields
             if key.endswith('_vector'):
                 try:
-                    # Handle string representation of list
                     if isinstance(value, str):
                         value = eval(value)
-                    # Convert numpy array to list
                     if isinstance(value, np.ndarray):
                         value = value.tolist()
-                    # Ensure value is a list of floats
                     if isinstance(value, list):
                         doc[key] = [float(x) for x in value]
                     else:
@@ -161,7 +151,6 @@ def upload_batch(index_name, batch_df):
                     print(f'Error processing vector {key}: {str(e)}')
                     continue
             else:
-                # Handle non-vector fields
                 if isinstance(value, (np.int64, np.float64)):
                     value = value.item()
                 if pd.isna(value) or value is None:
@@ -173,8 +162,6 @@ def upload_batch(index_name, batch_df):
                     doc[key] = value.isoformat()
                 else:
                     doc[key] = str(value)
-        
-        # Print vector fields for debugging
         vector_fields = {k: v for k, v in doc.items() if k.endswith('_vector')}
         if vector_fields:
             print(f'Vector fields being uploaded: {list(vector_fields.keys())}')
@@ -183,7 +170,6 @@ def upload_batch(index_name, batch_df):
                     print(f'{k} length: {len(v)}')
         
         bulk_data += json.dumps(doc, ensure_ascii=False) + '\n'
-    
     response = requests.post(
         f'{OPENSEARCH_URL}/_bulk',
         headers=HEADERS,
@@ -202,15 +188,12 @@ def upload_batch(index_name, batch_df):
             if 'error' in item['index']:
                 print(item['index']['error'])
         return False
-    
     return True
 
 def process_file(config):
     """Process a single file according to its configuration"""
     file_path = config['csv']
     print(f'\nProcessing: {file_path}')
-    
-
     try:
         if config['csv'].endswith('.xlsx'):
             df = pd.read_excel(config['csv'])
@@ -220,42 +203,33 @@ def process_file(config):
     except Exception as e:
         print(f'Error reading file: {str(e)}')
         return
-    
-    # Clean data
     for col in df.columns:
         if col not in ['name_vector', 'description_vector', 'category_vector', 'combination_vector']:
             df[col] = df[col].fillna('')
     print('\nColumns before renaming:\n' + '\n'.join(df.columns.tolist()))
     
-    # Check if we need to generate vectors
     if config.get('with_vectors'):
-        # Check if vectors already exist in the data
         vector_columns = ['name_vector', 'description_vector', 'category_vector', 'combination_vector']
         has_vectors = all(col in df.columns for col in vector_columns)
         
         if not has_vectors:
-            # Use correct column names based on current data
             if 'name_product' in df.columns:
                 text_columns = ['name_product', 'description', 'category']
             else:
                 text_columns = ['name', 'description', 'category']
-            
             df = process_vectors(df, text_columns)
             print('Vector embeddings generated')
-            
-            # Save the processed data with vectors
+
             out_path = './dataset/customer_history_data_ar_with_vectors.csv'
             df.to_csv(out_path, index=False)
             print(f'Saved processed data to {out_path}')
         else:
             print('Vector embeddings already exist in the data')
-    
-    # Ensure columns match schema
+
     df = df.rename(columns={
-        'name_product': 'name'  # Only rename name_product to name if it exists
+        'name_product': 'name'  
     })
     
-    # Verify required columns exist
     required_columns = ['id_customer', 'productCode', 'name', 'category', 'purchase_date', 
                        'description', 'quantity_of_product', 'price', 'order_id']
     missing_columns = [col for col in required_columns if col not in df.columns]
@@ -264,11 +238,9 @@ def process_file(config):
     
     print('\nColumns after renaming:\n' + '\n'.join(df.columns.tolist()))
     
-    # Always recreate index to ensure clean state
     if not recreate_index(config['index'], config['schema'], force=True):
         return
     
-    # Upload data in batches
     print(f'\nUploading {len(df)} documents to {config["index"]}...')
     total_batches = len(df) // BATCH_SIZE + (1 if len(df) % BATCH_SIZE > 0 else 0)
     for i in range(0, len(df), BATCH_SIZE):
@@ -278,7 +250,6 @@ def process_file(config):
             print('Upload failed, stopping')
             return
     
-    # Verify final count
     _, final_count = check_index_exists(config['index'])
     print(f'Successfully processed {config["csv"]}')
     print(f'Final document count in {config["index"]}: {final_count}')
