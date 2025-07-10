@@ -33,7 +33,6 @@
       "name_vector": { "type": "knn_vector", "dimension": 768 },
       "description_vector": { "type": "knn_vector", "dimension": 768 },
       "combination_vector": { "type": "knn_vector", "dimension": 768 },
-      "avg_vector": { "type": "knn_vector", "dimension": 768 }
 
     }
   }
