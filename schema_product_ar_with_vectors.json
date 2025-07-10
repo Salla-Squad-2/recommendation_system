@@ -29,11 +29,11 @@
       "price": { "type": "float" },
       "order_id": { "type": "keyword" },
 
-      "category_vector": { "type": "knn_vector", "dimension": 384 },
-      "name_vector": { "type": "knn_vector", "dimension": 384 },
-      "description_vector": { "type": "knn_vector", "dimension": 384 },
-      "combination_vector": { "type": "knn_vector", "dimension": 384 },
-      "avg_vector": { "type": "knn_vector", "dimension": 384 }
+      "category_vector": { "type": "knn_vector", "dimension": 768 },
+      "name_vector": { "type": "knn_vector", "dimension": 768 },
+      "description_vector": { "type": "knn_vector", "dimension": 768 },
+      "combination_vector": { "type": "knn_vector", "dimension": 768 },
+      "avg_vector": { "type": "knn_vector", "dimension": 768 }
 
     }
   }
