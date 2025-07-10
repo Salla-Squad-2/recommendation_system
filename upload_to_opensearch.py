@@ -1,86 +1,128 @@
 import pandas as pd
-import json
+import numpy as np
+import json, re, os, sys
 import requests
-import os
-import re
+import torch
+from transformers import AutoTokenizer, AutoModel
+from tqdm import tqdm
 
-# Configuration
-FILES = [
-    {
-        'csv': './dataset/gucci_cleaned_with_en.csv',
-        'schema': 'schema_product_en.json',
-        'index': 'products-en'
-    },
-    {
-        'csv': './dataset/gucci_cleaned_with_ar.csv',
-        'schema': 'schema_product_ar.json',
-        'index': 'products'
-    }
-]
+# ────────── CONFIG ──────────
+CSV_PATH        = "sample_products.csv"        
+SCHEMA_PATH     = "schema.json"               
+INDEX_NAME      = "product_vectors"
+OPENSEARCH_URL  = "http://localhost:9200"     
+MODEL_NAME      = "intfloat/multilingual-e5-base"
+BATCH_SIZE_DOCS = 100
+DEVICE          = "cuda" if torch.cuda.is_available() else "cpu"
 
-OPENSEARCH_URL = 'http://localhost:9200'
-HEADERS = {'Content-Type': 'application/json'}
-BATCH_SIZE = 10     # You can change it
+def find_col(df, patterns):
+    for col in df.columns:
+        for p in patterns:
+            if re.search(p, col, re.IGNORECASE):
+                return col
+    return None
 
-def upload_batch(index_name, batch_df):
-    for _, row in batch_df.iterrows():
-        bulk_data = json.dumps({"index": {"_index": index_name}}) + '\n'
-        doc = row.to_dict()
+print(f"Loading model: {MODEL_NAME} on {DEVICE}")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModel.from_pretrained(MODEL_NAME).to(DEVICE).eval()
 
-        for key, value in doc.items():
-            if isinstance(value, pd.Timestamp):
-                doc[key] = value.isoformat()
-            elif hasattr(value, 'astype'): 
-                try:
-                    doc[key] = pd.to_datetime(value).isoformat()
-                except Exception:
-                    pass
-        
-        bulk_data += json.dumps(doc, ensure_ascii=False) + '\n'
-        response = requests.post(f"{OPENSEARCH_URL}/_bulk", headers=HEADERS, data=bulk_data.encode('utf-8'))
+@torch.no_grad()
+def embed(text_batch):
+    inputs = tokenizer(
+        [f"passage: {t}" for t in text_batch],
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=256
+    ).to(DEVICE)
 
-    if response.status_code != 200:
-        print(f"Batch upload failed: {response.status_code} {response.text}")
-        return False
+    output = model(**inputs).last_hidden_state[:, 0, :]
+    normalized = torch.nn.functional.normalize(output, p=2, dim=1)
+    return normalized.cpu().numpy()
 
-    result = response.json()
-    if result.get('errors'):
-        print(f"Errors in bulk upload for {index_name}:")
-        for item in result['items']:
-            if 'error' in item['index']:
-                print(json.dumps(item['index']['error'], indent=2))
-        return False
+if not os.path.isfile(CSV_PATH):
+    sys.exit(f"CSV not found: {CSV_PATH}")
 
-    print(f"Batch uploaded successfully: {len(batch_df)} records")
-    return True
+df = pd.read_csv(CSV_PATH).fillna("")
 
-def process_file(csv_file, schema_file, index_name):
+id_col   = find_col(df, ["^id$", "product[_-]?id", "id_product"])
+name_col = find_col(df, ["name", "title", "name_product"])
+desc_col = find_col(df, ["description", "desc"])
+cat_col  = find_col(df, ["category", "type", "section"])
 
-    try:
-        df = pd.read_csv(csv_file, encoding='utf-8')
-        print(f"Loaded {len(df)} records from '{csv_file}'")
-    except Exception as e:
-        print(f"Error loading CSV '{csv_file}': {e}")
-        return
+if not all([id_col, name_col, desc_col, cat_col]):
+    sys.exit("Could not detect all required columns: id, name, description, category.")
 
-    if df is None:
-        print(f"Data conversion failed for '{csv_file}'")
-        return
+print("Detected columns:")
+print(f"   id           → {id_col}")
+print(f"   name         → {name_col}")
+print(f"   description  → {desc_col}")
+print(f"   category     → {cat_col}")
 
-    df = df.where(pd.notnull(df), None) 
+def column_to_vectors(series, label):
+    print(f"🔄 Embedding '{label}' …")
+    texts = series.astype(str).tolist()
+    all_vectors = []
+    for i in tqdm(range(0, len(texts), 64)):
+        batch = texts[i:i+64]
+        vectors = embed(batch)
+        all_vectors.append(vectors)
+    return np.vstack(all_vectors)
 
-    print(f"Uploading data to index '{index_name}' in batches...")
-    for start in range(0, len(df), BATCH_SIZE):
-        end = min(start + BATCH_SIZE, len(df))
-        print(f"Uploading records {start + 1} to {end}...")
-        batch_df = df.iloc[start:end]
-        if not upload_batch(index_name, batch_df):
-            print("Stopping upload due to errors.")
-            break
+name_vecs = column_to_vectors(df[name_col], "name")
+desc_vecs = column_to_vectors(df[desc_col], "description")
+cat_vecs  = column_to_vectors(df[cat_col], "category")
+combo_vecs = (name_vecs + desc_vecs + cat_vecs) / 3.0
+
+if not os.path.exists(SCHEMA_PATH):
+    sys.exit(f"Schema file not found: {SCHEMA_PATH}")
+
+with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+    mapping = json.load(f)
+
+print(f"Creating or resetting index '{INDEX_NAME}'")
+requests.delete(f"{OPENSEARCH_URL}/{INDEX_NAME}", auth=OPENSEARCH_AUTH)
+
+response = requests.put(
+    f"{OPENSEARCH_URL}/{INDEX_NAME}",
+    headers={"Content-Type": "application/json"},
+    data=json.dumps(mapping),
+    auth=OPENSEARCH_AUTH
+)
+
+if response.status_code not in (200, 201):
+    sys.exit(f"Failed to create index: {response.text}")
+    
+def bulk_upload(start, end):
+    lines = []
+    for i in range(start, end):
+        doc = {
+            "id_product":         str(df.iloc[i][id_col]),
+            "name_vector":        name_vecs[i].tolist(),
+            "description_vector": desc_vecs[i].tolist(),
+            "category_vector":    cat_vecs[i].tolist(),
+            "combination_vector": combo_vecs[i].tolist()
+        }
+        lines.append(json.dumps({ "index": { "_index": INDEX_NAME } }))
+        lines.append(json.dumps(doc, ensure_ascii=False))
+    
+    body = "\n".join(lines) + "\n"
+    res = requests.post(
+        f"{OPENSEARCH_URL}/_bulk",
+        headers={"Content-Type": "application/json"},
+        data=body.encode("utf-8"),
+        auth=OPENSEARCH_AUTH
+    )
+    
+    if res.status_code != 200 or res.json().get("errors"):
+        print("Bulk upload failed")
+        print(res.text)
     else:
-        print(f"All batches uploaded successfully for '{csv_file}'.")
+        print(f"Uploaded documents {start} to {end}")
 
-if __name__ == '__main__':
-    for f in FILES:
-        print(f"\n--- Processing {f['csv']} ---")
-        process_file(f['csv'], f['schema'], f['index'])
+print("Uploading vectors to OpenSearch")
+for start in range(0, len(df), BATCH_SIZE_DOCS):
+    end = min(start + BATCH_SIZE_DOCS, len(df))
+    bulk_upload(start, end)
+
+print("Done uploading all data.")
