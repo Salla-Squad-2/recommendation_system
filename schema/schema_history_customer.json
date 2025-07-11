@@ -10,7 +10,7 @@
   },
   "mappings": {
     "properties": {
-      "Customer ID": {
+      "id_customer": {
         "type": "keyword"   
       },
       "Product Code": {
