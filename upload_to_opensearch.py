@@ -28,7 +28,7 @@ except Exception as e:
 FILES = [
     {
         'csv': './dataset/customer_history_data_ar.xlsx',
-        'schema': './schema/schema_history_customer.json',
+        'schema': './schema/schema_history_customer_Demo.json',
         'index': 'products-history-ar',
         'with_vectors': False
     },
