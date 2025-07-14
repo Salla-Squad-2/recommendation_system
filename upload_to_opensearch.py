@@ -10,7 +10,7 @@ from transformers import AutoTokenizer, AutoModel
 # Configuration 
 OPENSEARCH_URL = 'http://localhost:9200'
 HEADERS = {'Content-Type': 'application/json'}
-MODEL_NAME = 'intfloat/multilingual-e5-base'
+MODEL_NAME = 'BAAI/bge-m3'
 BATCH_SIZE_UPLOAD = 10
 BATCH_SIZE_EMBED = 64
 BATCH_SIZE = 10
