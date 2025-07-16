@@ -26,16 +26,22 @@ except Exception as e:
     exit(1)
 
 FILES = [
+    # {
+    #     'csv': './dataset/customer_history_data_ar.xlsx',
+    #     'schema': './schema/schema_history_customer_Demo.json',
+    #     'index': 'products-history-ar',
+    #     'with_vectors': False
+    # },
+    # {
+    #     'csv': './dataset/customer_history_data_ar_with_vectors.csv',
+    #     'schema': './schema/schema_product_ar_with_vectors.json',
+    #     'index': 'products-history-vectors',
+    #     'with_vectors': True
+    # },
     {
-        'csv': './dataset/customer_history_data_ar.xlsx',
-        'schema': './schema/schema_history_customer_Demo.json',
-        'index': 'products-history-ar',
-        'with_vectors': False
-    },
-    {
-        'csv': './dataset/customer_history_data_ar_with_vectors.csv',
+        'csv': './dataset/customer_history_data_update_ar_with_img.csv',
         'schema': './schema/schema_product_ar_with_vectors.json',
-        'index': 'products-history-vectors',
+        'index': 'products-history-vectors-img',
         'with_vectors': True
     }
 ]
@@ -231,7 +237,7 @@ def process_file(config):
     })
     
     required_columns = ['id_customer', 'productCode', 'name', 'category', 'purchase_date', 
-                       'description', 'quantity_of_product', 'price', 'order_id']
+                       'description', 'quantity_of_product', 'price', 'order_id','image']
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         print(f'Warning: Missing required columns: {missing_columns}')
