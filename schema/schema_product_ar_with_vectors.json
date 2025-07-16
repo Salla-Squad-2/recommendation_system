@@ -28,6 +28,8 @@
       "quantity_of_product": { "type": "integer" },
       "price": { "type": "float" },
       "order_id": { "type": "keyword" },
+      "image": { "type": "keyword" },
+
 
       "category_vector": { "type": "knn_vector", "dimension": 1024 },
       "name_vector": { "type": "knn_vector", "dimension": 1024 },
