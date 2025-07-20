@@ -32,10 +32,10 @@
       "image": { "type": "keyword" },
 
 
-      "category_vector": { "type": "knn_vector", "dimension": 1024 },
-      "name_vector": { "type": "knn_vector", "dimension": 1024 },
-      "description_vector": { "type": "knn_vector", "dimension": 1024 },
-      "combination_vector": { "type": "knn_vector", "dimension": 1024 }
+      "category_vector": { "type": "knn_vector", "dimension": 768 },
+      "name_vector": { "type": "knn_vector", "dimension": 768 },
+      "description_vector": { "type": "knn_vector", "dimension": 768 },
+      "combination_vector": { "type": "knn_vector", "dimension": 768 }
 
     }
   }

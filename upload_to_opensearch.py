@@ -35,6 +35,7 @@ FILES = [
     # {
     #     'csv': './dataset/customer_history_data_ar_with_vectors.
     {
+
         'csv': './dataset/customer_history_data_update_ar_with_img.csv',
         'schema': './schema/schema_product_ar_with_vectors.json',
         'index': 'products-history-vectors-img',
