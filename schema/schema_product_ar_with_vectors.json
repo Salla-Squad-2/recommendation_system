@@ -15,16 +15,17 @@
   },
   "mappings": {
     "properties": {
-      "productCode": { "type": "keyword" },
-      "category": { "type": "keyword" },
-      "name": { "type": "text", "analyzer": "custom_text_analyzer" },
-      "description": { "type": "text", "analyzer": "custom_text_analyzer" },
-
       "id_customer": { "type": "keyword" },
+      "productCode": { "type": "keyword" },
+      "name_product": { "type": "text", "analyzer": "custom_text_analyzer" },
+      "category": { "type": "keyword" },
       "purchase_date": {
         "type": "date",
-        "format": "strict_date_optional_time||yyyy-MM-dd'T'HH:mm:ss||yyyy-MM-dd||epoch_millis"
+        "format": "strict_date_optional_time||yyyy-MM-dd'T'HH:mm:ss||yyyy-MM-dd||MM/dd/yyyy||M/d/yyyy||M/dd/yyyy||MM/d/yyyy"
       },
+      "description": { "type": "text", "analyzer": "custom_text_analyzer" },
+
+     
       "quantity_of_product": { "type": "integer" },
       "price": { "type": "float" },
       "order_id": { "type": "keyword" },
