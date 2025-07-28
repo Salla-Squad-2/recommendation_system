@@ -23,6 +23,6 @@ jobs:
       - name: Build and push OpenSearch Uploader
         uses: docker/build-push-action@v5
         with:
-          context: ./recommendation_system
+          context: 
           push: true
           tags: dana0/opensearch-uploader:latest
