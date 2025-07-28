@@ -26,12 +26,12 @@ except Exception as e:
     exit(1)
 
 FILES = [
-    # {
-    #     'csv': './dataset/customer_history_data_ar.xlsx',
-    #     'schema': './schema/schema_history_customer_Demo.json',
-    #     'index': 'products-history-ar',
-    #     'with_vectors': False
-    # },
+     {
+         'csv': './dataset/customer_history_data_ar.xlsx',
+         'schema': './schema/schema_history_customer_Demo.json',
+         'index': 'products-history-ar',
+         'with_vectors': False
+     },
     # {
     #     'csv': './dataset/customer_history_data_ar_with_vectors.
     {
@@ -206,6 +206,12 @@ def process_file(config):
     except Exception as e:
         print(f'Error reading file: {str(e)}')
         return
+
+    exists, count = check_index_exists(config['index'])
+    if exists and count > 0:
+        print(f'✅ Index {config["index"]} already has {count} documents. Skipping processing.')
+        return
+        
     for col in df.columns:
         if col not in ['name_vector', 'description_vector', 'category_vector', 'combination_vector']:
             df[col] = df[col].fillna('')
