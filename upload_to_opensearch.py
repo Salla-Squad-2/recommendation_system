@@ -206,7 +206,7 @@ def process_file(config):
     except Exception as e:
         print(f'Error reading file: {str(e)}')
         return
-
+#to stop if data exists
     exists, count = check_index_exists(config['index'])
     if exists and count > 0:
         print(f'✅ Index {config["index"]} already has {count} documents. Skipping processing.')
